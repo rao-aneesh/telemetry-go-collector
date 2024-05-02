@@ -64,10 +64,10 @@ var (
 	certFile           = flag.String("cert", "", "TLS cert file")
 	serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
 		"The server name to verify the hostname returned during TLS handshake")
-	sleepPort = flag.String("sleep_port", "8080", "Port to listen for sleep timer changes")
+	sleepPort    = flag.Uint("sleep_port", 0, "Port to listen for sleep commands")
+	outputPort   = flag.Uint("output_port", 0, "Port to send the output to")
+	initialSleep = flag.Uint64("initial_sleep", 0, "Initial sleep time in milliseconds")
 )
-
-var SLEEP_TIMER uint64 = 0
 
 func main() {
 	flag.Usage = usage
@@ -100,6 +100,19 @@ func main() {
 		opts = append(opts, grpc.WithInsecure())
 	}
 	opts = append(opts, grpc.WithPerRPCCredentials(cred))
+
+	if *sleepPort != 0 {
+		go sleepHandler()
+	}
+	var output_conn net.Conn = nil
+	var err error = nil
+	if *outputPort != 0 {
+		output_conn, err = net.Dial("tcp", ":"+strconv.FormatUint(uint64(*outputPort), 10))
+		if err != nil {
+			fmt.Println("Error opening socket to output port:", err)
+			return
+		}
+	}
 
 	conn, err := grpc.Dial(*serverAddr, opts...)
 	if err != nil {
@@ -141,7 +154,7 @@ func main() {
 				Subidstr: subid,
 				Qos:      marking}
 
-			go mdtSubscribe(configOperClient, &createSubsArgs)
+			go mdtSubscribe(configOperClient, output_conn, &createSubsArgs)
 		}
 		select {}
 	} else if strings.EqualFold(*operation, "get-proto") {
@@ -154,10 +167,12 @@ func main() {
 	} else {
 		fmt.Println("Unsupported operation!")
 	}
+
+	defer output_conn.Close()
 }
 
 // createSubs rpc to subscribe
-func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateSubsArgs) {
+func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, args *MdtDialin.CreateSubsArgs) {
 	fmt.Printf("mdtSubscribe: Dialin Reqid %d subscription %s\n", args.ReqId, args.Subidstr)
 
 	dataChan := make(chan []byte, 10000)
@@ -176,8 +191,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 		DataChan:   dataChan,
 	}
 	// handler for decoding the data, reads data from dataChan
-	go o.MdtOutLoop()
-	go sleep_handler()
+	go o.MdtOutLoop(output_conn)
 
 	stream, err := client.CreateSubs(context.Background(), args)
 	if err != nil {
@@ -185,7 +199,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 	}
 
 	for {
-		time.Sleep(time.Duration(SLEEP_TIMER) * time.Millisecond) // Add a sleep to slow down processing
+		time.Sleep(time.Duration(*initialSleep) * time.Millisecond) // Add a sleep to slow down processing
 		reply, err := stream.Recv()
 		if err == io.EOF {
 			fmt.Printf("Subscribe: Got EOF\n\n")
@@ -255,17 +269,17 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 	return 0
 }
 
-// Server for handling sleep timer
-func sleep_handler() {
-	// Listen on TCP port 8080
-	ln, err := net.Listen("tcp", ":"+*sleepPort)
+// Server for handling commands
+func sleepHandler() {
+	// Listen on TCP port
+	ln, err := net.Listen("tcp", ":"+strconv.FormatUint(uint64(*sleepPort), 10))
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer ln.Close()
 
-	fmt.Println("Server is listening on port 8080...")
+	fmt.Printf("sleepHandler is listening on port %s...\n", strconv.FormatUint(uint64(*sleepPort), 10))
 
 	for {
 		// Accept connection on port
@@ -275,43 +289,46 @@ func sleep_handler() {
 			continue
 		}
 
-		// Read message from the connection
-		message, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading:", err.Error())
-			conn.Close()
-			continue
+		fmt.Println("Connection accepted. No new connections will be accepted until this one is closed.")
+
+		// Create a buffer reader for the connection
+		reader := bufio.NewReader(conn)
+
+		for {
+			// Read message from the connection
+			message, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Println("Error reading:", err.Error())
+				break
+			}
+
+			trimmedMessage := strings.TrimSpace(message) // Remove newline and whitespace
+
+			// Check for CLOSE message
+			if trimmedMessage == "CLOSE" {
+				fmt.Println("Received CLOSE message, closing connection.")
+				conn.Write([]byte("Closing connection.\n"))
+				os.Exit(0)
+			}
+
+			// Convert message to uint64
+			number, err := strconv.ParseUint(trimmedMessage, 10, 64)
+			if err != nil {
+				fmt.Printf("Error converting message to uint64: %s\n", err.Error())
+				continue
+			}
+
+			*initialSleep = number
+
+			// Send a response
+			response := fmt.Sprintf("SLEEP_TIMER set to: %d\n", *initialSleep)
+			conn.Write([]byte(response))
 		}
 
-		trimmedMessage := strings.TrimSpace(message) // Remove newline and whitespace
-
-		// Check for CLOSE message
-		if trimmedMessage == "CLOSE" {
-			fmt.Println("Received CLOSE message, shutting down server.")
-			conn.Write([]byte("Server shutting down.\n"))
-			conn.Close()
-			break
-		}
-
-		// Convert message to uint64
-		number, err := strconv.ParseUint(trimmedMessage, 10, 64)
-		if err != nil {
-			fmt.Printf("Error converting message to uint64: %s\n", err.Error())
-			conn.Close()
-			continue
-		}
-
-		SLEEP_TIMER = number
-		fmt.Printf("SLEEP_TIMER set to: %d\n", SLEEP_TIMER)
-
-		// Send a response
-		response := fmt.Sprintf("SLEEP_TIMER set to: %d\n", SLEEP_TIMER)
-		conn.Write([]byte(response))
-
+		// Close the current connection before accepting a new one
 		conn.Close()
+		fmt.Println("Connection closed. Ready to accept a new connection.")
 	}
-
-	fmt.Println("Server has shut down.")
 }
 
 type passCredential int

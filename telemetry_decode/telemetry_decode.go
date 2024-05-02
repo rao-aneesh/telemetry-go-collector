@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"plugin"
@@ -61,7 +62,7 @@ type MdtOut struct {
 //     ii) if found, decode key and content of all rows using exported symbols from plugin
 //     write telemetry header and rows to out file
 //     iii) if not found, write the raw content to out file
-func (o *MdtOut) MdtOutLoop() {
+func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 	var err error
 
 	tmpFile, commandString := o.mdtPrepareDecoding()
@@ -85,7 +86,7 @@ func (o *MdtOut) MdtOutLoop() {
 			break
 		}
 		if o.Encoding == "json" {
-			o.mdtDumpJsonMessage(data)
+			o.mdtDumpJsonMessage(data, output_conn)
 		} else if o.Decode_raw || (len(o.ProtoFile) != 0) {
 			// use protoc to decode
 			/* Write to tmp file and run protoc command to decode */
@@ -124,7 +125,7 @@ func (o *MdtOut) MdtOutSetEncoding(encoding string) {
 }
 
 // json walk and dump
-func (o *MdtOut) mdtDumpJsonMessage(copy []byte) {
+func (o *MdtOut) mdtDumpJsonMessage(copy []byte, output_conn net.Conn) {
 	var prettyJSON bytes.Buffer
 
 	if o.esClient != nil {
@@ -146,10 +147,18 @@ func (o *MdtOut) mdtDumpJsonMessage(copy []byte) {
 		err := json.Indent(&prettyJSON, copy, "", "\t")
 		if err != nil {
 			fmt.Println("JSON parse error: ", err)
+			return
 		} else {
-			_, err = o.oFile.WriteString(string(prettyJSON.Bytes()))
-			if err != nil {
-				fmt.Println(err)
+			if output_conn == nil {
+				_, err = o.oFile.WriteString(string(prettyJSON.Bytes()))
+				if err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				_, err = output_conn.Write(prettyJSON.Bytes())
+				if err != nil {
+					fmt.Println(err)
+				}
 			}
 		}
 	}
