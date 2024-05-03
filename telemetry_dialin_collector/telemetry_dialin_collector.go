@@ -199,8 +199,9 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, a
 	}
 
 	for {
-		time.Sleep(time.Duration(*initialSleep) * time.Millisecond) // Add a sleep to slow down processing
 		reply, err := stream.Recv()
+		time.Sleep(time.Duration(*initialSleep) * time.Millisecond) // Add a sleep to slow down processing
+
 		if err == io.EOF {
 			fmt.Printf("Subscribe: Got EOF\n\n")
 			break
