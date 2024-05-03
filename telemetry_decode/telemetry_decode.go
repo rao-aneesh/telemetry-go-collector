@@ -112,9 +112,9 @@ func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 			}
 			if telem.GetDataGpb() != nil {
 				//this is gpb message
-				o.mdtDumpGPBMessage(telem)
+				o.mdtDumpGPBMessage(telem, output_conn)
 			} else {
-				o.mdtDumpKVGPBMessage(telem)
+				o.mdtDumpKVGPBMessage(telem, output_conn)
 			}
 		}
 	}
@@ -165,7 +165,7 @@ func (o *MdtOut) mdtDumpJsonMessage(copy []byte, output_conn net.Conn) {
 }
 
 // kvgpb walk and dump
-func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry) {
+func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry, output_conn net.Conn) {
 
 	if o.esClient != nil {
 		for i, row := range copy.GetDataGpbkv() {
@@ -178,9 +178,17 @@ func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry) {
 		}
 	} else {
 		j, _ := json.MarshalIndent(copy, "", "  ")
-		_, err := o.oFile.WriteString(string(j))
-		if err != nil {
-			fmt.Println(err)
+		if output_conn == nil {
+			_, err := o.oFile.WriteString(string(j))
+			if err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			_, err := output_conn.Write(j)
+			if err != nil {
+				fmt.Println(err)
+			}
+
 		}
 	}
 }
@@ -209,7 +217,7 @@ type rowToSerialise struct {
 }
 
 // try to find plugin to decode the gpb content
-func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
+func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry, output_conn net.Conn) {
 	var err error
 	var s msgToSerialise
 
@@ -217,9 +225,16 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 
 	if gpbPlugin == nil {
 		j, _ := json.MarshalIndent(copy, "", "  ")
-		_, err = o.oFile.WriteString(string(j))
-		if err != nil {
-			fmt.Println("Error writing the output", err)
+		if output_conn == nil {
+			_, err = o.oFile.WriteString(string(j))
+			if err != nil {
+				fmt.Println("Error writing the output", err)
+			}
+		} else {
+			_, err = output_conn.Write(j)
+			if err != nil {
+				fmt.Println(err)
+			}
 		}
 		return
 	}
@@ -287,9 +302,17 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 
 		var out bytes.Buffer
 		json.Indent(&out, b, "", "    ")
-		_, err = o.oFile.WriteString(out.String())
-		if err != nil {
-			fmt.Println("Error writing the output", err)
+		if output_conn == nil {
+			_, err = o.oFile.WriteString(out.String())
+			if err != nil {
+				fmt.Println("Error writing the output", err)
+			}
+		} else {
+			_, err = output_conn.Write(out.Bytes())
+			if err != nil {
+				fmt.Println(err)
+			}
+
 		}
 	}
 
