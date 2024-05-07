@@ -213,7 +213,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, a
 		if len(reply.Data) == 0 {
 			if len(reply.Errors) != 0 {
 				fmt.Printf("Subscribe: Received ReqId %d, error:\n%s\n", args.ReqId, reply.Errors)
-				break
+				os.Exit(1)
 			}
 		} else {
 			dataChan <- reply.Data
