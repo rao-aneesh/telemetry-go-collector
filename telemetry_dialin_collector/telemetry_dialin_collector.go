@@ -101,19 +101,6 @@ func main() {
 	}
 	opts = append(opts, grpc.WithPerRPCCredentials(cred))
 
-	if *sleepPort != 0 {
-		go sleepHandler()
-	}
-	var output_conn net.Conn = nil
-	var err error = nil
-	if *outputPort != 0 {
-		output_conn, err = net.Dial("tcp", ":"+strconv.FormatUint(uint64(*outputPort), 10))
-		if err != nil {
-			fmt.Println("Error opening socket to output port:", err)
-			return
-		}
-	}
-
 	conn, err := grpc.Dial(*serverAddr, opts...)
 	if err != nil {
 		log.Fatalf("fail to dial: %v", err)
@@ -131,6 +118,18 @@ func main() {
 	telemetryQos := (uint32)(*qos)
 
 	if strings.EqualFold(*operation, "subscribe") {
+		if *sleepPort != 0 {
+			go sleepHandler()
+		}
+		var output_conn net.Conn = nil
+		var err error = nil
+		if *outputPort != 0 {
+			output_conn, err = net.Dial("tcp", ":"+strconv.FormatUint(uint64(*outputPort), 10))
+			if err != nil {
+				fmt.Println("Error opening socket to output port:", err)
+				return
+			}
+		}
 		subidstrings := strings.Split(telemetrySubIdstr, "#")
 
 		var marking *MdtDialin.QOSMarking
@@ -156,6 +155,9 @@ func main() {
 
 			go mdtSubscribe(configOperClient, output_conn, &createSubsArgs)
 		}
+		if output_conn != nil {
+			defer output_conn.Close()
+		}
 		select {}
 	} else if strings.EqualFold(*operation, "get-proto") {
 		if len(*yangPath) > 0 {
@@ -167,8 +169,6 @@ func main() {
 	} else {
 		fmt.Println("Unsupported operation!")
 	}
-
-	defer output_conn.Close()
 }
 
 // createSubs rpc to subscribe
