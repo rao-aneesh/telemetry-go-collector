@@ -96,12 +96,19 @@ func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 				fmt.Println("Protoc error", err, out)
 				fmt.Println("Make sure protoc version in the $PATH is atleast 3.3.0")
 			} else {
-				_, err := o.oFile.WriteString(string(out))
-				if err != nil {
-					fmt.Println(err)
+				if output_conn == nil {
+					_, err := o.oFile.WriteString(string(out))
+					if err != nil {
+						fmt.Println(err)
+					}
+					tmpFile.Truncate(0)
+					tmpFile.Seek(0, 0)
+				} else {
+					_, err := output_conn.Write(out)
+					if err != nil {
+						fmt.Println(err)
+					}
 				}
-				tmpFile.Truncate(0)
-				tmpFile.Seek(0, 0)
 			}
 		} else {
 			telem := &telemetry.Telemetry{}
