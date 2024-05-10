@@ -67,6 +67,7 @@ var (
 	sleepPort    = flag.Uint("sleep_port", 0, "Port to listen for sleep commands")
 	outputPort   = flag.Uint("output_port", 0, "Port to send the output to")
 	initialSleep = flag.Uint64("initial_sleep", 0, "Initial sleep time in milliseconds")
+	outputIP     = flag.String("output_ip", "", "IP to send the output to")
 )
 
 func main() {
@@ -124,7 +125,7 @@ func main() {
 		var output_conn net.Conn = nil
 		var err error = nil
 		if *outputPort != 0 {
-			output_conn, err = net.Dial("tcp", ":"+strconv.FormatUint(uint64(*outputPort), 10))
+			output_conn, err = net.Dial("tcp", *outputIP+":"+strconv.FormatUint(uint64(*outputPort), 10))
 			if err != nil {
 				fmt.Println("Error opening socket to output port:", err)
 				return
@@ -273,14 +274,18 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 // Server for handling commands
 func sleepHandler() {
 	// Listen on TCP port
-	ln, err := net.Listen("tcp", ":"+strconv.FormatUint(uint64(*sleepPort), 10))
+	ip_address := "0.0.0.0"
+	if *outputIP == "" {
+		ip_address = "localhost"
+	}
+	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*sleepPort), 10))
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer ln.Close()
 
-	fmt.Printf("sleepHandler is listening on port %s...\n", strconv.FormatUint(uint64(*sleepPort), 10))
+	fmt.Printf("sleepHandler is listening on %s...\n", ln.Addr().String())
 
 	for {
 		// Accept connection on port
