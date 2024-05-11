@@ -419,7 +419,7 @@ func (o *MdtOut) mdtPrepareDecoding() (*os.File, string) {
 
 	// create/open output file
 	if len(o.OutFile) != 0 {
-		o.oFile, err = createFile(o.OutFile)
+		o.oFile, err = CreateFile(o.OutFile)
 		if err != nil {
 			log.Fatal("Failed to create output file for writing", err)
 		}
@@ -525,7 +525,7 @@ func elasticSearchClientInit(esServer string) *elasticsearch.Client {
 	return es
 }
 
-func createFile(outFile string) (*os.File, error) {
+func CreateFile(outFile string) (*os.File, error) {
 	var filePath string
 	if filepath.IsAbs(outFile) {
 		// If outFile is an absolute path

@@ -235,7 +235,10 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 
 	oFile = os.Stdout
 	if len(*outFile) != 0 {
-		oFile, err = os.Create(*outFile)
+		oFile, err = telemetry_decode.CreateFile(*outFile)
+		if err != nil {
+			log.Fatal("Failed to create output file for writing proto", err)
+		}
 		defer oFile.Close()
 	}
 
