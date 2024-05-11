@@ -86,7 +86,7 @@ func main() {
 			files, _ := filepath.Glob("/tmp/" + tmpFileName)
 			for _, f := range files {
 				if err := os.Remove(f); err != nil {
-					fmt.Printf("Failed to remove tmp file %s\n", f)
+					fmt.Fprintf(os.Stderr, "Failed to remove tmp file %s\n", f)
 				}
 			}
 			os.Exit(0)
@@ -127,7 +127,7 @@ func main() {
 		if *outputPort != 0 {
 			output_conn, err = net.Dial("tcp", *outputIP+":"+strconv.FormatUint(uint64(*outputPort), 10))
 			if err != nil {
-				fmt.Println("Error opening socket to output port:", err)
+				fmt.Fprintln(os.Stderr, "Error opening socket to output port:", err)
 				return
 			}
 		}
@@ -165,10 +165,10 @@ func main() {
 			getProtoArgs := MdtDialin.GetProtoFileArgs{ReqId: reqId, YangPath: *yangPath}
 			mdtGetProto(configOperClient, &getProtoArgs)
 		} else {
-			fmt.Println("No yang path specified!")
+			fmt.Fprintln(os.Stderr, "No yang path specified!")
 		}
 	} else {
-		fmt.Println("Unsupported operation!")
+		fmt.Fprintln(os.Stderr, "Unsupported operation!")
 	}
 }
 
@@ -213,7 +213,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, a
 
 		if len(reply.Data) == 0 {
 			if len(reply.Errors) != 0 {
-				fmt.Printf("Subscribe: Received ReqId %d, error:\n%s\n", args.ReqId, reply.Errors)
+				fmt.Fprintf(os.Stderr, "Subscribe: Received ReqId %d, error:\n%s\n", args.ReqId, reply.Errors)
 				os.Exit(1)
 			}
 		} else {
@@ -250,11 +250,10 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 		}
 
 		if len(reply.Errors) != 0 {
-			fmt.Printf("GetProto: ReqId %d, received error: %s\n", args.ReqId, reply.Errors)
+			fmt.Fprintf(os.Stderr, "GetProto: ReqId %d, received error: %s\n", args.ReqId, reply.Errors)
 			return 0
 		} else if reply.ReqId != args.ReqId {
-			fmt.Printf("GetProto: mismatch sent ReqID %d, Received ReqId %d\n",
-				args.ReqId, reply.ReqId)
+			fmt.Fprintf(os.Stderr, "GetProto: mismatch sent ReqID %d, Received ReqId %d\n", args.ReqId, reply.ReqId)
 			return 0
 		} else {
 			if len(reply.ProtoContent) == 0 {
@@ -262,7 +261,7 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 			} else {
 				_, err := oFile.WriteString(reply.ProtoContent)
 				if err != nil {
-					fmt.Println(err)
+					fmt.Fprintln(os.Stderr, err)
 				}
 			}
 		}
@@ -280,7 +279,7 @@ func sleepHandler() {
 	}
 	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*sleepPort), 10))
 	if err != nil {
-		fmt.Println("Error listening:", err.Error())
+		fmt.Fprintln(os.Stderr, "Error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer ln.Close()
@@ -291,11 +290,9 @@ func sleepHandler() {
 		// Accept connection on port
 		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Println("Error accepting:", err.Error())
+			fmt.Fprintln(os.Stderr, "Error accepting:", err.Error())
 			continue
 		}
-
-		fmt.Println("Connection accepted. No new connections will be accepted until this one is closed.")
 
 		// Create a buffer reader for the connection
 		reader := bufio.NewReader(conn)
@@ -304,7 +301,7 @@ func sleepHandler() {
 			// Read message from the connection
 			message, err := reader.ReadString('\n')
 			if err != nil {
-				fmt.Println("Error reading:", err.Error())
+				fmt.Fprintln(os.Stderr, "Error reading:", err.Error())
 				break
 			}
 
@@ -320,7 +317,7 @@ func sleepHandler() {
 			// Convert message to uint64
 			number, err := strconv.ParseUint(trimmedMessage, 10, 64)
 			if err != nil {
-				fmt.Printf("Error converting message to uint64: %s\n", err.Error())
+				fmt.Fprintf(os.Stderr, "Error converting message to uint64: %s\n", err.Error())
 				continue
 			}
 
