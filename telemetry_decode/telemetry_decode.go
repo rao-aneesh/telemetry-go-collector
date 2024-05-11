@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"plugin"
 	"strconv"
 	"strings"
@@ -418,7 +419,7 @@ func (o *MdtOut) mdtPrepareDecoding() (*os.File, string) {
 
 	// create/open output file
 	if len(o.OutFile) != 0 {
-		o.oFile, err = ioutil.TempFile(".", o.OutFile)
+		o.oFile, err = createFile(o.OutFile)
 		if err != nil {
 			log.Fatal("Failed to create output file for writing", err)
 		}
@@ -522,4 +523,32 @@ func elasticSearchClientInit(esServer string) *elasticsearch.Client {
 	log.Printf("Server: %s", r["version"].(map[string]interface{})["number"])
 	log.Println(strings.Repeat("~", 37))
 	return es
+}
+
+func createFile(outFile string) (*os.File, error) {
+	var filePath string
+	if filepath.IsAbs(outFile) {
+		// If outFile is an absolute path
+		filePath = outFile
+	} else {
+		// If outFile is just the file name, create it in the working directory
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		filePath = filepath.Join(currentDir, outFile)
+	}
+
+	// Create directory if it doesn't exist
+	err := os.MkdirAll(filepath.Dir(filePath), 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the file
+	file, err := os.Create(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
