@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +62,7 @@ type MdtOut struct {
 //     ii) if found, decode key and content of all rows using exported symbols from plugin
 //     write telemetry header and rows to out file
 //     iii) if not found, write the raw content to out file
-func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
+func (o *MdtOut) MdtOutLoop() {
 	var err error
 
 	tmpFile, commandString := o.mdtPrepareDecoding()
@@ -87,7 +86,7 @@ func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 			break
 		}
 		if o.Encoding == "json" {
-			o.mdtDumpJsonMessage(data, output_conn)
+			o.mdtDumpJsonMessage(data)
 		} else if o.Decode_raw || (len(o.ProtoFile) != 0) {
 			// use protoc to decode
 			/* Write to tmp file and run protoc command to decode */
@@ -97,19 +96,12 @@ func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 				fmt.Fprintln(os.Stderr, "Protoc error", err, string(out))
 				fmt.Fprintln(os.Stderr, "Make sure protoc version in the $PATH is at least 3.3.0")
 			} else {
-				if output_conn == nil {
-					_, err := o.oFile.WriteString(string(out))
-					if err != nil {
-						fmt.Fprintln(os.Stderr, err)
-					}
-					tmpFile.Truncate(0)
-					tmpFile.Seek(0, 0)
-				} else {
-					_, err := output_conn.Write(out)
-					if err != nil {
-						fmt.Fprintln(os.Stderr, err)
-					}
+				_, err := o.oFile.WriteString(string(out))
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
 				}
+				tmpFile.Truncate(0)
+				tmpFile.Seek(0, 0)
 			}
 		} else {
 			telem := &telemetry.Telemetry{}
@@ -120,9 +112,9 @@ func (o *MdtOut) MdtOutLoop(output_conn net.Conn) {
 			}
 			if telem.GetDataGpb() != nil {
 				//this is gpb message
-				o.mdtDumpGPBMessage(telem, output_conn)
+				o.mdtDumpGPBMessage(telem)
 			} else {
-				o.mdtDumpKVGPBMessage(telem, output_conn)
+				o.mdtDumpKVGPBMessage(telem)
 			}
 		}
 	}
@@ -133,7 +125,7 @@ func (o *MdtOut) MdtOutSetEncoding(encoding string) {
 }
 
 // json walk and dump
-func (o *MdtOut) mdtDumpJsonMessage(copy []byte, output_conn net.Conn) {
+func (o *MdtOut) mdtDumpJsonMessage(copy []byte) {
 	var prettyJSON bytes.Buffer
 
 	if o.esClient != nil {
@@ -157,23 +149,17 @@ func (o *MdtOut) mdtDumpJsonMessage(copy []byte, output_conn net.Conn) {
 			fmt.Fprintln(os.Stderr, "JSON parse error: ", err)
 			return
 		} else {
-			if output_conn == nil {
-				_, err = o.oFile.WriteString(prettyJSON.String())
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-				}
-			} else {
-				_, err = output_conn.Write(prettyJSON.Bytes())
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-				}
+			_, err = o.oFile.WriteString(prettyJSON.String())
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
 			}
+
 		}
 	}
 }
 
 // kvgpb walk and dump
-func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry, output_conn net.Conn) {
+func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry) {
 
 	if o.esClient != nil {
 		for i, row := range copy.GetDataGpbkv() {
@@ -186,17 +172,9 @@ func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry, output_conn net.
 		}
 	} else {
 		j, _ := json.MarshalIndent(copy, "", "  ")
-		if output_conn == nil {
-			_, err := o.oFile.WriteString(string(j))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
-		} else {
-			_, err := output_conn.Write(j)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
-
+		_, err := o.oFile.WriteString(string(j))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 		}
 	}
 }
@@ -225,7 +203,7 @@ type rowToSerialise struct {
 }
 
 // try to find plugin to decode the gpb content
-func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry, output_conn net.Conn) {
+func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 	var err error
 	var s msgToSerialise
 
@@ -233,16 +211,9 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry, output_conn net.Co
 
 	if gpbPlugin == nil {
 		j, _ := json.MarshalIndent(copy, "", "  ")
-		if output_conn == nil {
-			_, err = o.oFile.WriteString(string(j))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error writing the output", err)
-			}
-		} else {
-			_, err = output_conn.Write(j)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
+		_, err = o.oFile.WriteString(string(j))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error writing the output", err)
 		}
 		return
 	}
@@ -310,17 +281,9 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry, output_conn net.Co
 
 		var out bytes.Buffer
 		json.Indent(&out, b, "", "    ")
-		if output_conn == nil {
-			_, err = o.oFile.WriteString(out.String())
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error writing the output", err)
-			}
-		} else {
-			_, err = output_conn.Write(out.Bytes())
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
-
+		_, err = o.oFile.WriteString(out.String())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error writing the output", err)
 		}
 	}
 

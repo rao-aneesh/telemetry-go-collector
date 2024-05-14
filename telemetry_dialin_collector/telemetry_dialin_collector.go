@@ -65,9 +65,8 @@ var (
 	serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
 		"The server name to verify the hostname returned during TLS handshake")
 	sleepPort    = flag.Uint("sleep_port", 0, "Port to listen for sleep commands")
-	outputPort   = flag.Uint("output_port", 0, "Port to send the output to")
 	initialSleep = flag.Uint64("initial_sleep", 0, "Initial sleep time in milliseconds")
-	outputIP     = flag.String("output_ip", "", "IP to send the output to")
+	remote       = flag.Bool("remote", false, "Client should listen on sleepPort from remote IP as well.")
 )
 
 func main() {
@@ -122,15 +121,6 @@ func main() {
 		if *sleepPort != 0 {
 			go sleepHandler()
 		}
-		var output_conn net.Conn = nil
-		var err error = nil
-		if *outputPort != 0 {
-			output_conn, err = net.Dial("tcp", *outputIP+":"+strconv.FormatUint(uint64(*outputPort), 10))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error opening socket to output port:", err)
-				return
-			}
-		}
 		subidstrings := strings.Split(telemetrySubIdstr, "#")
 
 		var marking *MdtDialin.QOSMarking
@@ -154,10 +144,7 @@ func main() {
 				Subidstr: subid,
 				Qos:      marking}
 
-			go mdtSubscribe(configOperClient, output_conn, &createSubsArgs)
-		}
-		if output_conn != nil {
-			defer output_conn.Close()
+			go mdtSubscribe(configOperClient, &createSubsArgs)
 		}
 		select {}
 	} else if strings.EqualFold(*operation, "get-proto") {
@@ -173,7 +160,7 @@ func main() {
 }
 
 // createSubs rpc to subscribe
-func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, args *MdtDialin.CreateSubsArgs) {
+func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateSubsArgs) {
 	fmt.Printf("mdtSubscribe: Dialin Reqid %d subscription %s\n", args.ReqId, args.Subidstr)
 
 	dataChan := make(chan []byte, 10000)
@@ -192,7 +179,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, output_conn net.Conn, a
 		DataChan:   dataChan,
 	}
 	// handler for decoding the data, reads data from dataChan
-	go o.MdtOutLoop(output_conn)
+	go o.MdtOutLoop()
 
 	stream, err := client.CreateSubs(context.Background(), args)
 	if err != nil {
@@ -276,9 +263,9 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 // Server for handling commands
 func sleepHandler() {
 	// Listen on TCP port
-	ip_address := "0.0.0.0"
-	if *outputIP == "" {
-		ip_address = "localhost"
+	ip_address := "localhost"
+	if *remote {
+		ip_address = "0.0.0.0"
 	}
 	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*sleepPort), 10))
 	if err != nil {
