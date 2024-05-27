@@ -64,9 +64,9 @@ var (
 	certFile           = flag.String("cert", "", "TLS cert file")
 	serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
 		"The server name to verify the hostname returned during TLS handshake")
-	sleepPort    = flag.Uint("sleep_port", 0, "Port to listen for sleep commands")
-	initialSleep = flag.Uint64("initial_sleep", 0, "Initial sleep time in milliseconds")
-	remote       = flag.Bool("remote", false, "Client should listen on sleepPort from remote IP as well.")
+	communicationPort = flag.Uint("communication_port", 0, "Port to listen for commands")
+	initialDelay      = flag.Uint64("initial_delay", 0, "Initial delay time in milliseconds")
+	remote            = flag.Bool("remote", false, "Client should listen on communicationPort from remote IP as well.")
 )
 
 func main() {
@@ -118,8 +118,8 @@ func main() {
 	telemetryQos := (uint32)(*qos)
 
 	if strings.EqualFold(*operation, "subscribe") {
-		if *sleepPort != 0 {
-			go sleepHandler()
+		if *communicationPort != 0 {
+			go communicationHandler()
 		}
 		subidstrings := strings.Split(telemetrySubIdstr, "#")
 
@@ -188,7 +188,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 
 	for {
 		reply, err := stream.Recv()
-		time.Sleep(time.Duration(*initialSleep) * time.Millisecond) // Add a sleep to slow down processing
+		time.Sleep(time.Duration(*initialDelay) * time.Millisecond) // Add a sleep to slow down processing
 
 		if err == io.EOF {
 			fmt.Printf("Subscribe: Got EOF\n\n")
@@ -261,20 +261,20 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 }
 
 // Server for handling commands
-func sleepHandler() {
+func communicationHandler() {
 	// Listen on TCP port
 	ip_address := "localhost"
 	if *remote {
 		ip_address = "0.0.0.0"
 	}
-	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*sleepPort), 10))
+	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*communicationPort), 10))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error listening:", err.Error())
 		os.Exit(1)
 	}
 	defer ln.Close()
 
-	fmt.Printf("sleepHandler is listening on %s...\n", ln.Addr().String())
+	fmt.Printf("communicationHandler is listening on %s...\n", ln.Addr().String())
 
 	for {
 		// Accept connection on port
@@ -304,6 +304,13 @@ func sleepHandler() {
 				os.Exit(0)
 			}
 
+			if trimmedMessage == "GET_DELAY_TIMER" {
+				// Send a response
+				response := fmt.Sprintf("%d\n", *initialDelay)
+				conn.Write([]byte(response))
+				continue
+			}
+
 			// Convert message to uint64
 			number, err := strconv.ParseUint(trimmedMessage, 10, 64)
 			if err != nil {
@@ -311,10 +318,10 @@ func sleepHandler() {
 				continue
 			}
 
-			*initialSleep = number
+			*initialDelay = number
 
 			// Send a response
-			response := fmt.Sprintf("SLEEP_TIMER set to: %d\n", *initialSleep)
+			response := fmt.Sprintf("DELAY_TIMER set to: %d\n", *initialDelay)
 			conn.Write([]byte(response))
 		}
 
