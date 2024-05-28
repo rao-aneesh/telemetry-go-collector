@@ -65,7 +65,7 @@ var (
 	serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
 		"The server name to verify the hostname returned during TLS handshake")
 	communicationPort = flag.Uint("communication_port", 0, "Port to listen for commands")
-	initialDelay      = flag.Uint64("initial_delay", 0, "Initial delay time in milliseconds")
+	delay             = flag.Uint64("delay", 0, "Delay time per request in milliseconds")
 	remote            = flag.Bool("remote", false, "Client should listen on communicationPort from remote IP as well.")
 )
 
@@ -188,7 +188,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 
 	for {
 		reply, err := stream.Recv()
-		time.Sleep(time.Duration(*initialDelay) * time.Millisecond) // Add a sleep to slow down processing
+		time.Sleep(time.Duration(*delay) * time.Millisecond) // Add a sleep to slow down processing
 
 		if err == io.EOF {
 			fmt.Printf("Subscribe: Got EOF\n\n")
@@ -306,7 +306,7 @@ func communicationHandler() {
 
 			if trimmedMessage == "GET_DELAY_TIMER" {
 				// Send a response
-				response := fmt.Sprintf("%d\n", *initialDelay)
+				response := fmt.Sprintf("%d\n", *delay)
 				conn.Write([]byte(response))
 				continue
 			}
@@ -318,10 +318,10 @@ func communicationHandler() {
 				continue
 			}
 
-			*initialDelay = number
+			*delay = number
 
 			// Send a response
-			response := fmt.Sprintf("DELAY_TIMER set to: %d\n", *initialDelay)
+			response := fmt.Sprintf("Delay set to: %d\n", *delay)
 			conn.Write([]byte(response))
 		}
 
