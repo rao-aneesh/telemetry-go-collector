@@ -112,7 +112,7 @@ func (o *MdtOut) MdtOutLoop() {
 			}
 			if telem.GetDataGpb() != nil {
 				//this is gpb message
-				o.mdtDumpGPBMessage(telem)
+				o.mdtDumpGPBMessage2(telem)
 			} else {
 				o.mdtDumpKVGPBMessage(telem)
 			}
@@ -195,11 +195,23 @@ type msgToSerialise struct {
 	Rows      []*rowToSerialise `json:"Rows,omitempty"`
 }
 
+// Message type to make output similar to json
+type msgToSerialise2 struct {
+	Node_id_str           string            `json:"node_id_str"`
+	Subscription_id_str   string            `json:"subscription_id_str"`
+	Encoding_path         string            `json:"encoding_path"`
+	Collection_id         string            `json:"collection_id"`
+	Collection_start_time string            `json:"collection_start_time"`
+	Msg_timestamp         string            `json:"msg_timestamp"`
+	Data_gpb              []*rowToSerialise `json:"data_gpb"`
+	Collection_end_time   string            `json:"collection_end_time"`
+}
+
 // Message row type used for serialisation
 type rowToSerialise struct {
-	Timestamp uint64
-	Keys      *json.RawMessage
-	Content   *json.RawMessage
+	Timestamp uint64           `json:"timestamp"`
+	Keys      *json.RawMessage `json:"keys,omitempty"`
+	Content   *json.RawMessage `json:"content,omitempty"`
 }
 
 // try to find plugin to decode the gpb content
@@ -287,6 +299,90 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 		}
 	}
 
+}
+
+// Function added by Jeffrey
+func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
+	var err error
+	var s msgToSerialise2
+
+	if (copy.EncodingPath != "Cisco-IOS-XR-ip-rib-ipv4-oper:rib/vrfs/vrf/afs/af/safs/saf/ip-rib-route-table-names/ip-rib-route-table-name/routes/route") &&
+		(copy.EncodingPath != "Cisco-IOS-XR-ip-rib-ipv6-oper:ipv6-rib/vrfs/vrf/afs/af/safs/saf/ip-rib-route-table-names/ip-rib-route-table-name/routes/route") {
+		o.mdtDumpGPBMessage(copy)
+		return
+	}
+
+	marshaller := &jsonpb.Marshaler{
+		EmitDefaults: true,
+		OrigName:     true}
+
+	ribKey := &telemetry.Ipv4RibEdmRoute_KEYS{}
+	ribContent := &telemetry.Ipv4RibEdmRoute{}
+
+	for i, row := range copy.GetDataGpb().GetRow() {
+		err = proto.Unmarshal(row.Keys, ribKey)
+		if err != nil {
+			fmt.Println("plugin unmarshal failed", err)
+			return
+		}
+
+		err = proto.Unmarshal(row.Content, ribContent)
+		if err != nil {
+			fmt.Println("plugin unmarshal failed", err)
+			return
+		}
+
+		var keys json.RawMessage
+		var content json.RawMessage
+
+		decodedContentJSON, err := marshaller.MarshalToString(ribContent)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			content = json.RawMessage(decodedContentJSON)
+		}
+
+		decodedKeysJSON, err := marshaller.MarshalToString(ribKey)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			keys = json.RawMessage(decodedKeysJSON)
+		}
+
+		s.Data_gpb = append(s.Data_gpb, &rowToSerialise{row.Timestamp, &keys, &content})
+
+		if o.esClient != nil {
+			b, _ := json.Marshal(&rowToSerialise{row.Timestamp, &keys, &content})
+			o.elasticSearchOutput(string(b),
+				copy.GetEncodingPath(),
+				copy.GetNodeIdStr(),
+				strconv.FormatUint(copy.GetCollectionId(), 10),
+				i)
+		}
+	}
+
+	if o.esClient == nil {
+		s.Node_id_str = copy.GetNodeIdStr()
+		s.Subscription_id_str = copy.GetSubscriptionIdStr()
+		s.Encoding_path = copy.GetEncodingPath()
+		s.Collection_id = strconv.FormatUint(copy.GetCollectionId(), 10)
+		s.Collection_start_time = strconv.FormatUint(copy.GetCollectionStartTime(), 10)
+		s.Msg_timestamp = strconv.FormatUint(copy.GetMsgTimestamp(), 10)
+		s.Collection_end_time = strconv.FormatUint(copy.GetCollectionEndTime(), 10)
+
+		b, err := json.Marshal(s)
+		if err != nil {
+			fmt.Errorf("Marshalling collected content, [%+v][%+v]",
+				s, err)
+		}
+
+		var out bytes.Buffer
+		json.Indent(&out, b, "", "    ")
+		_, err = o.oFile.WriteString(out.String())
+		if err != nil {
+			fmt.Println("Error writing the output", err)
+		}
+	}
 }
 
 type Plug struct {
