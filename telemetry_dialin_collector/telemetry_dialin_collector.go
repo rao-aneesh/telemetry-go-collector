@@ -191,7 +191,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 		time.Sleep(time.Duration(*delay) * time.Millisecond) // Add a sleep to slow down processing
 
 		if err == io.EOF {
-			fmt.Printf("Subscribe: Got EOF\n\n")
+			fmt.Fprintf(os.Stderr, "Subscribe: Got EOF\n\n")
 			break
 		}
 		if err != nil {
