@@ -90,15 +90,15 @@ func (o *MdtOut) MdtOutLoop() {
 		} else if o.Decode_raw || (len(o.ProtoFile) != 0) {
 			// use protoc to decode
 			/* Write to tmp file and run protoc command to decode */
-			_, err = tmpFile.Write(data)
+			_, _ = tmpFile.Write(data)
 			out, err := exec.Command("sh", "-c", commandString).CombinedOutput()
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Protoc error", err, string(out))
-				fmt.Fprintln(os.Stderr, "Make sure protoc version in the $PATH is at least 3.3.0")
+				log.Fatal("Make sure protoc version in the $PATH is at least 3.3.0")
 			} else {
 				_, err := o.oFile.WriteString(string(out))
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					log.Fatal(err)
 				}
 				tmpFile.Truncate(0)
 				tmpFile.Seek(0, 0)
@@ -108,7 +108,7 @@ func (o *MdtOut) MdtOutLoop() {
 
 			err = proto.Unmarshal(data, telem)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to unmarshal:", err)
+				log.Fatal("Failed to unmarshal: ", err)
 			}
 			if telem.GetDataGpb() != nil {
 				//this is gpb message
@@ -146,12 +146,12 @@ func (o *MdtOut) mdtDumpJsonMessage(copy []byte) {
 	} else {
 		err := json.Indent(&prettyJSON, copy, "", "\t")
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "JSON parse error: ", err)
+			log.Fatal("JSON parse error: ", err)
 			return
 		} else {
 			_, err = o.oFile.WriteString(prettyJSON.String())
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				log.Fatal(err)
 			}
 
 		}
@@ -174,7 +174,7 @@ func (o *MdtOut) mdtDumpKVGPBMessage(copy *telemetry.Telemetry) {
 		j, _ := json.MarshalIndent(copy, "", "  ")
 		_, err := o.oFile.WriteString(string(j))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			log.Fatal(err)
 		}
 	}
 }
@@ -225,7 +225,7 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 		j, _ := json.MarshalIndent(copy, "", "  ")
 		_, err = o.oFile.WriteString(string(j))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error writing the output", err)
+			log.Fatal("Error writing the output", err)
 		}
 		return
 	}
@@ -237,13 +237,13 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 	for i, row := range copy.GetDataGpb().GetRow() {
 		err = proto.Unmarshal(row.Keys, gpbPlugin.decodedKeys)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "plugin unmarshal failed", err)
+			log.Fatal("plugin unmarshal failed", err)
 			return
 		}
 
 		err = proto.Unmarshal(row.Content, gpbPlugin.decodedContent)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "plugin unmarshal failed", err)
+			log.Fatal("plugin unmarshal failed", err)
 			return
 		}
 
@@ -252,14 +252,14 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 
 		decodedContentJSON, err := marshaller.MarshalToString(gpbPlugin.decodedContent)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			log.Fatal(err)
 		} else {
 			content = json.RawMessage(decodedContentJSON)
 		}
 
 		decodedKeysJSON, err := marshaller.MarshalToString(gpbPlugin.decodedKeys)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			log.Fatal(err)
 		} else {
 			keys = json.RawMessage(decodedKeysJSON)
 		}
@@ -287,7 +287,7 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 
 		b, err := json.Marshal(s)
 		if err != nil {
-			fmt.Errorf("Marshalling collected content, [%+v][%+v]",
+			log.Fatalf("Marshalling collected content, [%+v][%+v]",
 				s, err)
 		}
 
@@ -295,7 +295,7 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 		json.Indent(&out, b, "", "    ")
 		_, err = o.oFile.WriteString(out.String())
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error writing the output", err)
+			log.Fatal("Error writing the output: ", err)
 		}
 	}
 
@@ -322,14 +322,12 @@ func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
 	for i, row := range copy.GetDataGpb().GetRow() {
 		err = proto.Unmarshal(row.Keys, ribKey)
 		if err != nil {
-			fmt.Println("plugin unmarshal failed", err)
-			return
+			log.Fatal("plugin unmarshal failed", err)
 		}
 
 		err = proto.Unmarshal(row.Content, ribContent)
 		if err != nil {
-			fmt.Println("plugin unmarshal failed", err)
-			return
+			log.Fatal("plugin unmarshal failed", err)
 		}
 
 		var keys json.RawMessage
@@ -337,14 +335,14 @@ func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
 
 		decodedContentJSON, err := marshaller.MarshalToString(ribContent)
 		if err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
 		} else {
 			content = json.RawMessage(decodedContentJSON)
 		}
 
 		decodedKeysJSON, err := marshaller.MarshalToString(ribKey)
 		if err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
 		} else {
 			keys = json.RawMessage(decodedKeysJSON)
 		}
@@ -372,7 +370,7 @@ func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
 
 		b, err := json.Marshal(s)
 		if err != nil {
-			fmt.Errorf("Marshalling collected content, [%+v][%+v]",
+			log.Fatalf("Marshalling collected content, [%+v][%+v]",
 				s, err)
 		}
 
@@ -380,7 +378,7 @@ func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
 		json.Indent(&out, b, "", "    ")
 		_, err = o.oFile.WriteString(out.String())
 		if err != nil {
-			fmt.Println("Error writing the output", err)
+			log.Fatal("Error writing the output", err)
 		}
 	}
 }
@@ -412,7 +410,7 @@ func mdtGetPlugin(encodingPath string, pluginDir string, pluginFile string) *gpb
 		if pluginFile != "" {
 			plug, err = plugin.Open(pluginFile)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "plugin open failed", err)
+				log.Fatal("plugin open failed", err)
 				return nil
 			}
 			symStr := strings.ToLower(encodingPath)
@@ -422,12 +420,12 @@ func mdtGetPlugin(encodingPath string, pluginDir string, pluginFile string) *gpb
 
 			symKey, err := plug.Lookup("KEYS_" + symStr)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "plugin symbol not found", err)
+				log.Fatal("plugin symbol not found", err)
 				return nil
 			}
 			symContent, err := plug.Lookup("CONTENT_" + symStr)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "plugin symbol not found", err)
+				log.Fatal("plugin symbol not found", err)
 				return nil
 			}
 			decodedKeys, _ = symKey.(proto.Message)
@@ -439,7 +437,7 @@ func mdtGetPlugin(encodingPath string, pluginDir string, pluginFile string) *gpb
 			}
 			plug, err = plugin.Open(pluginDir + pluginFileName)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "plugin open failed", err)
+				log.Fatal("plugin open failed", err)
 				return nil
 			}
 

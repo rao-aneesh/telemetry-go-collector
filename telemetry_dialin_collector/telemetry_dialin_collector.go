@@ -32,15 +32,15 @@ var telemetryEncoding = map[string]int64{
 }
 
 var usage = func() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
+	fmt.Printf("Usage: %s [options]\n", os.Args[0])
 
 	flag.PrintDefaults()
-	fmt.Fprintf(os.Stderr, "Examples:\n")
-	fmt.Fprintf(os.Stderr, "Subscribe                       : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Get proto for yang path         : %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Subscribe, using TLS            : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode : %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode without proto: %s %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
+	fmt.Printf("Examples:\n")
+	fmt.Printf("Subscribe                       : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
+	fmt.Printf("Get proto for yang path         : %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
+	fmt.Printf("Subscribe, using TLS            : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>\n", os.Args[0])
+	fmt.Printf("Subscribe, use protoc to decode : %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
+	fmt.Printf("Subscribe, use protoc to decode without proto: %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
 }
 
 var (
@@ -85,7 +85,7 @@ func main() {
 			files, _ := filepath.Glob("/tmp/" + tmpFileName)
 			for _, f := range files {
 				if err := os.Remove(f); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to remove tmp file %s\n", f)
+					log.Fatalf("Failed to remove tmp file %s\n", f)
 				}
 			}
 			os.Exit(0)
@@ -152,10 +152,10 @@ func main() {
 			getProtoArgs := MdtDialin.GetProtoFileArgs{ReqId: reqId, YangPath: *yangPath}
 			mdtGetProto(configOperClient, &getProtoArgs)
 		} else {
-			fmt.Fprintln(os.Stderr, "No yang path specified!")
+			log.Fatal("No yang path specified!")
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "Unsupported operation!")
+		log.Fatal("Unsupported operation!")
 	}
 }
 
@@ -191,7 +191,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 		time.Sleep(time.Duration(*delay) * time.Millisecond) // Add a sleep to slow down processing
 
 		if err == io.EOF {
-			fmt.Fprintf(os.Stderr, "Subscribe: Got EOF\n\n")
+			log.Fatal("Subscribe: Got EOF\n\n")
 			break
 		}
 		if err != nil {
@@ -200,8 +200,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
 
 		if len(reply.Data) == 0 {
 			if len(reply.Errors) != 0 {
-				fmt.Fprintf(os.Stderr, "Subscribe: Received ReqId %d, error:\n%s\n", args.ReqId, reply.Errors)
-				os.Exit(1)
+				log.Fatalf("Subscribe: Received ReqId %d, error:\n%s\n", args.ReqId, reply.Errors)
 			}
 		} else {
 			dataChan <- reply.Data
@@ -240,18 +239,16 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
 		}
 
 		if len(reply.Errors) != 0 {
-			fmt.Fprintf(os.Stderr, "GetProto: ReqId %d, received error: %s\n", args.ReqId, reply.Errors)
-			return 0
+			log.Fatalf("GetProto: ReqId %d, received error: %s\n", args.ReqId, reply.Errors)
 		} else if reply.ReqId != args.ReqId {
-			fmt.Fprintf(os.Stderr, "GetProto: mismatch sent ReqID %d, Received ReqId %d\n", args.ReqId, reply.ReqId)
-			return 0
+			log.Fatalf("GetProto: mismatch sent ReqID %d, Received ReqId %d\n", args.ReqId, reply.ReqId)
 		} else {
 			if len(reply.ProtoContent) == 0 {
-				fmt.Printf("GetProto: Received ReqId %d \n", reply.ReqId)
+				log.Fatalf("GetProto: Received ReqId %d \n", reply.ReqId)
 			} else {
 				_, err := oFile.WriteString(reply.ProtoContent)
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					log.Fatal(err)
 				}
 			}
 		}
@@ -269,8 +266,7 @@ func communicationHandler() {
 	}
 	ln, err := net.Listen("tcp", ip_address+":"+strconv.FormatUint(uint64(*communicationPort), 10))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error listening:", err.Error())
-		os.Exit(1)
+		log.Fatalf("Error listening: %v", err.Error())
 	}
 	defer ln.Close()
 
@@ -291,7 +287,7 @@ func communicationHandler() {
 			// Read message from the connection
 			message, err := reader.ReadString('\n')
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error reading:", err.Error())
+				fmt.Fprintln(os.Stderr, "Error reading: ", err.Error())
 				break
 			}
 
