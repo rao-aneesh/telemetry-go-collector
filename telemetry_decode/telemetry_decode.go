@@ -209,9 +209,11 @@ type msgToSerialise2 struct {
 
 // Message row type used for serialisation
 type rowToSerialise struct {
-	Timestamp uint64           `json:"timestamp"`
-	Keys      *json.RawMessage `json:"keys,omitempty"`
-	Content   *json.RawMessage `json:"content,omitempty"`
+	Timestamp      uint64           `json:"timestamp"`
+	Timestamp_Nano uint64           `json:"timestamp_nano,omitempty"`
+	Delete         bool             `json:"delete,omitempty"`
+	Keys           *json.RawMessage `json:"keys,omitempty"`
+	Content        *json.RawMessage `json:"content,omitempty"`
 }
 
 // try to find plugin to decode the gpb content
@@ -264,10 +266,10 @@ func (o *MdtOut) mdtDumpGPBMessage(copy *telemetry.Telemetry) {
 			keys = json.RawMessage(decodedKeysJSON)
 		}
 
-		s.Rows = append(s.Rows, &rowToSerialise{row.Timestamp, &keys, &content})
+		s.Rows = append(s.Rows, &rowToSerialise{row.Timestamp, row.TimestampNano, row.Delete, &keys, &content})
 
 		if o.esClient != nil {
-			b, _ := json.Marshal(&rowToSerialise{row.Timestamp, &keys, &content})
+			b, _ := json.Marshal(&rowToSerialise{row.Timestamp, row.TimestampNano, row.Delete, &keys, &content})
 			o.elasticSearchOutput(string(b),
 				copy.GetEncodingPath(),
 				copy.GetNodeIdStr(),
@@ -347,10 +349,10 @@ func (o *MdtOut) mdtDumpGPBMessage2(copy *telemetry.Telemetry) {
 			keys = json.RawMessage(decodedKeysJSON)
 		}
 
-		s.Data_gpb = append(s.Data_gpb, &rowToSerialise{row.Timestamp, &keys, &content})
+		s.Data_gpb = append(s.Data_gpb, &rowToSerialise{row.Timestamp, row.TimestampNano, row.Delete, &keys, &content})
 
 		if o.esClient != nil {
-			b, _ := json.Marshal(&rowToSerialise{row.Timestamp, &keys, &content})
+			b, _ := json.Marshal(&rowToSerialise{row.Timestamp, row.TimestampNano, row.Delete, &keys, &content})
 			o.elasticSearchOutput(string(b),
 				copy.GetEncodingPath(),
 				copy.GetNodeIdStr(),
